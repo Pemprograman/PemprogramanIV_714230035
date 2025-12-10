@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:open_file/open_file.dart';
-import 'dart:io';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
 
 class AdvancedForm extends StatefulWidget {
   const AdvancedForm({super.key});
@@ -14,15 +13,43 @@ class AdvancedForm extends StatefulWidget {
 }
 
 class _AdvancedFormState extends State<AdvancedForm> {
-  // Date Picker variables
-  DateTime? _dueDate;
+  DateTime _dueDate = DateTime.now();
   final currentDate = DateTime.now();
+  Color _currentColor = Colors.orange;
+  String? _dataFile;
+  Uint8List? _imageBytes; // Untuk web, gunakan bytes
 
-  // Color Picker variable
-  Color _currentColor = Colors.blue;
+  void _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'png', 'jpeg', 'pdf', 'txt', 'doc'],
+      withData: true, // Penting untuk web
+    );
+    
+    if (result == null) return;
 
-  PlatformFile? _pickedFile;
-  File? _showImage;
+    final file = result.files.first;
+
+    // Cek apakah file adalah gambar
+    if (file.extension == 'jpg' ||
+        file.extension == 'png' ||
+        file.extension == 'jpeg') {
+      setState(() {
+        _imageBytes = file.bytes;
+      });
+    }
+
+    setState(() {
+      _dataFile = file.name;
+    });
+
+    // Untuk web, kita tidak bisa membuka file secara otomatis
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('File dipilih: ${file.name}')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,91 +62,70 @@ class _AdvancedFormState extends State<AdvancedForm> {
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            buildDatePicker(),
+            buildDatePicker(context),
             const SizedBox(height: 20),
-            buildColorPicker(),
+            buildColorPicker(context),
+            const SizedBox(height: 20),
+            buildFilePicker(context),
           ],
         ),
       ),
     );
   }
 
-  // ------------------ DATE PICKER ------------------
-  Widget buildDatePicker() {
+  Widget buildDatePicker(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Date Picker",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              _dueDate == null
-                  ? DateFormat('dd-MM-yyyy').format(currentDate)
-                  : DateFormat('dd-MM-yyyy').format(_dueDate!),
-            ),
-
-            ElevatedButton(
+            const Text('Date'),
+            TextButton(
+              child: const Text('Select'),
               onPressed: () async {
                 final selectDate = await showDatePicker(
                   context: context,
                   initialDate: currentDate,
-                  firstDate: DateTime(currentDate.year - 5),
+                  firstDate: DateTime(1990),
                   lastDate: DateTime(currentDate.year + 5),
                 );
 
-                if (selectDate != null) {
-                  setState(() {
+                setState(() {
+                  if (selectDate != null) {
                     _dueDate = selectDate;
-                  });
-                }
+                  }
+                });
               },
-              child: const Text("Select"),
-            )
+            ),
           ],
         ),
+        Text(DateFormat('dd MMMM yyyy').format(_dueDate)),
       ],
     );
   }
 
-  // ------------------ COLOR PICKER ------------------
-  Widget buildColorPicker() {
+  Widget buildColorPicker(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Color Picker",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+        const Text('Color'),
         const SizedBox(height: 10),
-
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: _currentColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.black26),
-              ),
-            ),
-
-            ElevatedButton(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) {
-                    return AlertDialog(
-                      title: const Text("Pick a color"),
-                      content: SingleChildScrollView(
-                        child: BlockPicker(
+        Container(height: 100, width: double.infinity, color: _currentColor),
+        const SizedBox(height: 10),
+        Center(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _currentColor),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: const Text('Pick Your Color'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        BlockPicker(
                           pickerColor: _currentColor,
                           onColorChanged: (color) {
                             setState(() {
@@ -127,95 +133,52 @@ class _AdvancedFormState extends State<AdvancedForm> {
                             });
                           },
                         ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          child: const Text("Close"),
-                        ),
                       ],
-                    );
-                  },
-                );
-              },
-              child: const Text("Pick Color"),
-            )
-          ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          return Navigator.of(context).pop();
+                        },
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+            child: const Text('Pick Color'),
+          ),
         ),
       ],
     );
   }
 
-  // ------------------ FILE PICKER ------------------
-
-
-
-Widget buildFilePicker() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        "File Picker",
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-      const SizedBox(height: 10),
-
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              _pickedFile != null ? _pickedFile!.name : "No file selected",
-            ),
-          ),
-
-          ElevatedButton(
+  Widget buildFilePicker(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Pick File'),
+        const SizedBox(height: 10),
+        Center(
+          child: ElevatedButton(
             onPressed: () {
               _pickFile();
             },
-            child: const Text("Pick File"),
+            child: const Text('Pick File'),
           ),
-        ],
-      ),
-
-      // tampilkan gambar jika ada
-      if (_showImage != null) ...[
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 200,
-          child: Image.file(_showImage!),
         ),
+        if (_dataFile != null) Text('File Name: $_dataFile'),
+
+        const SizedBox(height: 10),
+        if (_imageBytes != null)
+          Image.memory(
+            _imageBytes!,
+            height: 200,
+            width: double.infinity,
+            fit: BoxFit.cover,
+          ),
       ],
-    ],
-  );
-}
-
-Future<void> _pickFile() async {
-  final result = await FilePicker.platform.pickFiles();
-
-  if (result == null) return;
-
-  _pickedFile = result.files.first;
-
-  // buka file
-  if (_pickedFile!.path != null) {
-    _openFile(_pickedFile!.path!);
+    );
   }
-
-  // cek jika file gambar
-  if (_pickedFile!.extension == "png" ||
-      _pickedFile!.extension == "jpg" ||
-      _pickedFile!.extension == "jpeg") {
-    _showImage = File(_pickedFile!.path!);
-  }
-
-  setState(() {});
-}
-
-void _openFile(String path) {
-  OpenFile.open(path);
-}
-
 }
